@@ -1,0 +1,270 @@
+DELIMITER //
+
+CREATE TRIGGER bidPriceCheck
+
+after INSERT ON Bid
+
+FOR EACH ROW
+BEGIN
+	
+	if (new.ItemID not in (select ItemID from CurrentBid)) THEN begin
+		
+		if (new.BidPrice < (select InitialPrice + Increment from BidInfo where BidInfo.ItemID=new.ItemID)) then begin
+
+			signal sqlstate '44000' set message_text='error for bid price smaller then increment';
+
+		end;
+
+        else
+ 
+			insert into CurrentBid values (new.ItemID, new.BidID, new.Email, new.BidPrice);
+
+		end if;
+
+	end;
+
+	elseif (new.BidPrice < (select BidInfo.Increment + CurrentBid.BidPrice from BidInfo, CurrentBid where CurrentBid.ItemID=new.ItemID and BidInfo.ItemID=new.ItemID))
+
+	THEN BEGIN
+			
+            if (true )then begin
+
+			Signal SQLSTATE '45000' set message_text='error for bid price smaller then current price';
+
+			End;
+
+            end if;
+
+    END;
+
+    else begin
+
+		delete from CurrentBid where ItemID=new.ItemID;
+
+        insert into CurrentBid values (new.ItemID, new.BidID, new.Email, new.BidPrice);
+	end;
+
+	END IF;
+
+END//
+
+
+CREATE TRIGGER datecheck
+After INSERT ON BidInfo
+FOR EACH ROW
+BEGIN
+IF (NEW.CloseDateAndTime <= (select PostDate from Headphone where new.ItemID=Headphone.ItemID))
+THEN BEGIN
+
+        Signal sqlstate '22000' set message_text='error for close date before post date';
+        END;
+End if;
+END//
+
+Create trigger autocheck
+before insert on AutomaticlyBid
+for each row
+begin
+if(new.Lmt < (select BidInfo.Increment + CurrentBid.BidPrice from BidInfo, CurrentBid where CurrentBid.ItemID=new.ItemID and BidInfo.ItemID=new.ItemID))
+then begin
+
+	signal sqlstate '30000' set message_text='Lmt cannot be lower then the current bid + increment';
+
+    end;
+
+end if;
+
+end//
+
+
+create trigger autobid
+
+after insert on CurrentBid
+
+for each row
+
+begin
+ 
+	declare a bool;
+
+    declare bidid int;
+
+    declare eml varchar(30);
+
+    declare p int;
+
+	set a = (select Anonymous from Bid where ItemID=new.ItemID and Email = eml);
+
+	
+	set bidid = (select BidID from Bid where ItemID = new.ItemID order by BidPrice desc limit 1);
+
+	
+    set eml = (select Email from AutomaticlyBid where ItemID=new.ItemID order by Lmt desc limit 1);
+
+    
+    set p = (select BidPrice + Increment from CurrentBid join BidInfo where BidInfo.ItemID=new.ItemID and CurrentBid.ItemID=new.ItemID);
+
+	if(new.ItemID in (select ItemID from AutomaticlyBid) and new.Email <> eml)
+	then begin
+		if ((select Lmt from AutomaticlyBid where ItemID=new.ItemID order by Lmt desc limit 1) < p)
+
+        then begin
+
+			insert into Email values ("System alert",eml,now(),"Alert for bid item",concat("someone bid higher then you on item",new.ItemID));
+
+            delete from AutomaticlyBid where ItemID=new.ItemID and Email=eml;
+
+		end;
+
+		else begin
+
+			
+			insert into Bid (BidTime, BidPrice, ItemID, Email, Anonymous) values (
+
+				now(),
+
+                p,
+
+                new.ItemID,
+
+                eml,
+
+                a
+
+            );
+
+            delete from CurrentBid where ItemID=new.ItemID;
+
+			insert into CurrentBid values (new.ItemID, bidid, eml, p);
+
+		end;
+
+		end if;
+
+	end;
+
+	End if;
+
+End//
+
+
+
+CREATE  
+EVENT closedate
+
+ON SCHEDULE EVERY 1 MINUTE starts now()
+
+ON COMPLETION NOT PRESERVE ENABLE
+DO 
+BEGIN
+
+	update Headphone set status = 1 where ItemID in (select bi.ItemID from BidInfo as bi where bi.CloseDateAndTime <= now());
+
+END //
+
+
+create trigger done
+ 
+after update on Headphone
+ 
+for each row
+begin
+ 
+	declare itemid int;
+
+    declare min int;
+
+    declare p int;
+    
+declare tm datetime;
+    
+declare eml varchar(30);
+
+    set eml = (select Email from CurrentBid where ItemID=new.ItemID);
+
+    set tm = (select CloseDateAndTime from BidInfo where ItemID=new.ItemID);
+
+    set min = (select MinPrice from BidInfo where ItemID=new.ItemID);
+
+    set itemid = new.ItemID;
+ 
+   set p = (select BidPrice from CurrentBid where ItemID=new.ItemID order by BidPrice limit 1);
+    if (new.status = 1 and old.status=0) then begin
+ 
+		if (isnull(eml)) then begin
+ 
+			set eml = new.SEmail;
+
+			insert into Email values (concat('System Alert for ', itemid), eml, now(),"No one bid your item","");
+		end;
+
+		else begin
+
+			if (p > min and new.status = 1 and old.status=0) then begin
+				insert into final values (itemid, tm, eml,p);
+
+				insert into Email values ("System Alert", eml, now(),"Got' em", "you are the winner");
+
+			end;
+
+			else begin
+
+
+				insert into Email values ("System Alert", eml, now(),"not reach the reserve price","rt");
+
+			end;
+
+			end if;
+
+		end;
+
+		end if;
+
+	end;
+
+    end if;
+
+end//
+
+
+create trigger rvbid
+
+after delete on Bid
+
+for each row
+begin
+
+	declare bd int;
+    
+declare eml varchar(30);
+
+    declare bp int;
+
+    set bd = (select BidID from Bid where ItemID=old.ItemID order by BidPrice desc limit 1);
+
+    set eml = (select Email from Bid where ItemID=old.ItemID order by BidPrice desc limit 1);
+
+    set bp = (select BidPrice from Bid where ItemID=old.ItemID order by BidPrice desc limit 1);
+
+	if(old.Email = (select Email from CurrentBid where ItemID=old.ItemID)) then begin
+ 
+       update CurrentBid set BidID=bd, Email=eml, BidPrice=bp;
+
+	end;
+
+    end if;
+
+end//
+
+
+
+create trigger rv
+
+after insert on RemoveBid
+
+for each row
+begin
+
+	delete from Bid where BidID = new.BidID;
+
+end//
