@@ -1,7 +1,7 @@
 Our project url: http://ec2-18-219-57-77.us-east-2.compute.amazonaws.com:8080/cs336Final/
 
 
-Our Tomacat username£ºhushenghan99 and password:690402ding
+Our Tomacat usernameÂ£Âºhushenghan99 and password:690402ding
 
 
 
@@ -24,7 +24,6 @@ different items, therefore it is also not accurate to compare items' name. We us
 which is two items are same when they have same condition, type, connectivities, connector size,
 color and use. We also have this definition in our jsp code as comment when we implement this rule.
 
-3. Even though we have 3 persons, Only Liqin Long & Shenghan Hu were doing the project. The other guy
-didn't show up since the beginning. Liqin Long as the leader did the majority works and cover most of our project,
+3. Even though we have 3 persons, Liqin Long as the leader did the majority works and cover most of our project,
 also offers a lot help to Shenghan Hu during work on project.
 
